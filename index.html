@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>RaLaba Ops</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+  <h2>Daily Sales</h2>
+  <div id="data">Loading...</div>
+
+  <script>
+    const SUPABASE_URL = "https://vbostmwevjhazoipfhbx.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZib3N0bXdldmpoYXpvaXBmaGJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxODYxNDAsImV4cCI6MjA5Mjc2MjE0MH0.bt-Jpczy2ItRbLDto5nIgPDrT1DEhbCnSYGfvpEv-AU";
+
+    async function loadData() {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/receipts`, {
+        headers: {
+          "apikey": SUPABASE_KEY,
+          "Authorization": `Bearer ${SUPABASE_KEY}`
+        }
+      });
+
+      const data = await res.json();
+
+      document.getElementById("data").innerHTML =
+        data.map(r => `
+          <div style="border:1px solid #ccc; margin:8px; padding:8px;">
+            <b>${r.customer}</b><br/>
+            ₱${r.amount} - ${r.payment_method}<br/>
+            ${new Date(r.date).toLocaleString()}
+          </div>
+        `).join("");
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
