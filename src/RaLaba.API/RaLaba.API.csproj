@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>ralaba-ops-api</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RaLaba.Application\RaLaba.Application.csproj" />
+    <ProjectReference Include="..\RaLaba.Infrastructure\RaLaba.Infrastructure.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="Serilog.AspNetCore" Version="8.0.2" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,20 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+
+# Frontend
+node_modules/
+frontend/dist/
+.env
+.env.local
+
+# Secrets
+appsettings.*.json
+!appsettings.json
+!appsettings.Development.json
+
+# OS
+.DS_Store
+Thumbs.db
