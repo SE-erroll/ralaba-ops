@@ -1,5 +1,9 @@
 # RaLaba Ops
 
+Local security changes are prepared but not deployed. See
+[security setup and verification](docs/security-setup.md) before running this copy.
+Staff sign-in and an explicit server-side staff allowlist are now required.
+
 A production-style Retail Operations & Cash Reconciliation platform built to replace an Excel-based laundry business workflow, and to serve as a portfolio project demonstrating Clean Architecture in a real-world .NET + React application.
 
 ## Stack
@@ -61,7 +65,9 @@ dotnet test
 
 Current schema (`receipts` table) lives in Supabase. See `docs/database-schema.sql` for the DDL.
 
-> ⚠️ RLS on `receipts` is currently set to "Allow All" as a temporary measure. Lock this down before exposing the API publicly — see `docs/roadmap.md`.
+> The previously documented production RLS state was "Allow All". This local change
+> does not alter that state. Review `docs/security-review.sql` and verify access in a
+> test database before a separately approved production rollout.
 
 ## Roadmap
 

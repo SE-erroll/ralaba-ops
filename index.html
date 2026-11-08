@@ -6,33 +6,15 @@
 </head>
 <body>
   <h2>Daily Sales</h2>
-  <div id="data">Loading...</div>
-
-  <script>
-    const SUPABASE_URL = "https://vbostmwevjhazoipfhbx.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZib3N0bXdldmpoYXpvaXBmaGJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxODYxNDAsImV4cCI6MjA5Mjc2MjE0MH0.bt-Jpczy2ItRbLDto5nIgPDrT1DEhbCnSYGfvpEv-AU";
-
-    async function loadData() {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/receipts`, {
-        headers: {
-          "apikey": SUPABASE_KEY,
-          "Authorization": `Bearer ${SUPABASE_KEY}`
-        }
-      });
-
-      const data = await res.json();
-
-      document.getElementById("data").innerHTML =
-        data.map(r => `
-          <div style="border:1px solid #ccc; margin:8px; padding:8px;">
-            <b>${r.customer}</b><br/>
-            ₱${r.amount} - ${r.payment_method}<br/>
-            ${new Date(r.date).toLocaleString()}
-          </div>
-        `).join("");
-    }
-
-    loadData();
-  </script>
+  <form id="login">
+    <label>Email <input id="email" type="email" autocomplete="username" required></label>
+    <label>Password <input id="password" type="password" autocomplete="current-password" required></label>
+    <button id="submit" type="submit">Sign in</button>
+  </form>
+  <button id="logout" type="button" hidden>Sign out</button>
+  <p id="message" role="status">Sign in to view receipts.</p>
+  <div id="data"></div>
+  <script src="./runtime-config.js"></script>
+  <script type="module" src="./legacy-viewer.mjs"></script>
 </body>
 </html>

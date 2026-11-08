@@ -1,10 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using RaLaba.Application.DTOs;
 using RaLaba.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 
 namespace RaLaba.API.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class ReceiptsController : ControllerBase
 {

@@ -6,6 +6,9 @@ using RaLaba.Domain.Interfaces;
 using RaLaba.Infrastructure.Persistence;
 using RaLaba.Infrastructure.Repositories;
 using Serilog;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using RaLaba.API.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +22,8 @@ builder.Host.UseSerilog();
 // Database
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+if (string.IsNullOrWhiteSpace(connectionString))
+    throw new InvalidOperationException("Configure ConnectionStrings:DefaultConnection through user secrets or the server environment.");
 
 builder.Services.AddDbContext<RaLabaDbContext>(options =>
     options.UseNpgsql(connectionString));
@@ -26,6 +31,32 @@ builder.Services.AddDbContext<RaLabaDbContext>(options =>
 // Dependency Injection
 builder.Services.AddScoped<IReceiptRepository, ReceiptRepository>();
 builder.Services.AddScoped<IReceiptService, ReceiptService>();
+
+builder.Services.AddOptions<SupabaseAuthOptions>()
+    .Bind(builder.Configuration.GetSection("SupabaseAuth"))
+    .Validate(o => Uri.TryCreate(o.Url, UriKind.Absolute, out var uri)
+        && uri.Scheme == Uri.UriSchemeHttps && uri.AbsolutePath == "/"
+        && string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Query)
+        && string.IsNullOrEmpty(uri.Fragment), "SupabaseAuth:Url must be an HTTPS project origin.")
+    .Validate(o => !string.IsNullOrWhiteSpace(o.PublishableKey), "Configure a Supabase publishable key.")
+    .ValidateOnStart();
+builder.Services.AddHttpClient(SupabaseAuthenticationHandler.HttpClientName, client =>
+    client.Timeout = TimeSpan.FromSeconds(10))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddAuthentication(SupabaseAuthenticationHandler.SchemeName)
+    .AddScheme<AuthenticationSchemeOptions, SupabaseAuthenticationHandler>(
+        SupabaseAuthenticationHandler.SchemeName, _ => { });
+var staffIds = builder.Configuration.GetSection("SupabaseAuth:StaffUserIds").Get<Guid[]>() ?? Array.Empty<Guid>();
+builder.Services.AddAuthorization(options =>
+{
+    var staffPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .RequireAssertion(context => Guid.TryParse(
+            context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value,
+            out var id) && staffIds.Contains(id)).Build();
+    options.DefaultPolicy = staffPolicy;
+    options.FallbackPolicy = staffPolicy;
+});
 
 // CORS - frontend dev server
 builder.Services.AddCors(options =>
@@ -52,7 +83,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 app.UseCors("AllowFrontend");
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+public partial class Program { }
