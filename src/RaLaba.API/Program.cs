@@ -9,6 +9,8 @@ using Serilog;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using RaLaba.API.Security;
+using Npgsql;
+using RaLaba.API.Integrations;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,6 +29,15 @@ if (string.IsNullOrWhiteSpace(connectionString))
 
 builder.Services.AddDbContext<RaLabaDbContext>(options =>
     options.UseNpgsql(connectionString));
+
+var loyverse = builder.Configuration.GetSection("Loyverse").Get<LoyverseOptions>() ?? new();
+builder.Services.AddSingleton(loyverse);
+builder.Services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
+builder.Services.AddHttpClient<LoyverseClient>(client => client.Timeout = TimeSpan.FromSeconds(45))
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+builder.Services.AddScoped<LoyverseSync>();
+builder.Services.AddSingleton<LoyverseWorker>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<LoyverseWorker>());
 
 // Dependency Injection
 builder.Services.AddScoped<IReceiptRepository, ReceiptRepository>();

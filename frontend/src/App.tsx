@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import DashboardPage from "./pages/DashboardPage";
 import ReceiptsPage from "./pages/ReceiptsPage";
 import StaffAccess from "./components/StaffAccess";
+import LoyversePage from "./pages/LoyversePage";
 
 function App() {
   return (
@@ -9,6 +10,7 @@ function App() {
       <StaffAccess><Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/receipts" element={<ReceiptsPage />} />
+        <Route path="/loyverse" element={<LoyversePage />} />
       </Routes></StaffAccess>
     </div>
   );

@@ -21,7 +21,7 @@ export default function StaffAccess({ children }: { children: ReactNode }) {
   }
   if (signedIn) return <>
     <header className="flex items-center justify-between border-b bg-white p-4">
-      <nav className="flex gap-4"><Link to="/">Dashboard</Link><Link to="/receipts">Receipts</Link></nav>
+      <nav className="flex flex-wrap gap-4"><Link to="/">Dashboard</Link><Link to="/receipts">Existing receipts</Link><Link to="/loyverse">Loyverse & payments</Link></nav>
       <button onClick={() => { void auth.signOut().catch(err => setError(err.message)); }}>Sign out</button>
     </header>
     {children}

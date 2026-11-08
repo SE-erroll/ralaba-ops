@@ -57,6 +57,12 @@ public class ReceiptAccessTests
 
     [Theory]
     [InlineData("GET", "/api/receipts")]
+    [InlineData("GET", "/api/loyverse/receipts")]
+    [InlineData("GET", "/api/loyverse/collections")]
+    [InlineData("GET", "/api/loyverse/status")]
+    [InlineData("POST", "/api/loyverse/sync")]
+    [InlineData("POST", "/api/loyverse/receipts/1-1/payments")]
+    [InlineData("POST", "/api/loyverse/receipts/1-1/initial-payment")]
     [InlineData("GET", "/api/receipts/11111111-1111-4111-8111-111111111111")]
     [InlineData("POST", "/api/receipts")]
     [InlineData("DELETE", "/api/receipts/11111111-1111-4111-8111-111111111111")]
