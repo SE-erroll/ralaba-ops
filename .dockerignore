@@ -1,0 +1,9 @@
+.git
+**/node_modules
+**/bin
+**/obj
+**/.env*
+**/*.log
+frontend
+outputs
+work
