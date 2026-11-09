@@ -33,9 +33,9 @@ public sealed class LoyverseController(NpgsqlDataSource database, LoyverseSync s
     }
 
     [HttpGet("receipts")]
-    public async Task<IActionResult> Receipts([FromQuery] int offset = 0, [FromQuery] bool unpaid = false, CancellationToken ct = default)
+    public async Task<IActionResult> Receipts([FromQuery] int offset = 0, [FromQuery] bool unpaid = false, [FromQuery] string? number = null, CancellationToken ct = default)
     {
-        if (offset < 0) return BadRequest(new { error = "Invalid page." });
+        if (offset < 0 || number?.Length > 200) return BadRequest(new { error = "Invalid page or receipt number." });
         await using var command = database.CreateCommand("""
             select r.receipt_number,r.receipt_date,r.customer_name,r.first_payload::text,r.payload::text,
               r.initial_received,r.initial_status,r.review_reason,r.source_changed,coalesce(p.received,0),
@@ -45,10 +45,12 @@ public sealed class LoyverseController(NpgsqlDataSource database, LoyverseSync s
               select sum(amount) received, jsonb_agg(jsonb_build_object('id',id,'amount',amount,'date',collected_date,'method',method,'note',note,'initial',origin_key like 'initial:%') order by collected_date,recorded_at) history
               from ralaba_private.receipt_payments where merchant_id=r.merchant_id and receipt_number=r.receipt_number
             ) p on true
-            where not @unpaid or r.initial_received is null or r.source_changed or coalesce(p.received,0)<(r.first_payload->>'total_money')::numeric
+            where (@number='' or r.receipt_number=@number)
+              and (not @unpaid or r.initial_received is null or r.source_changed or coalesce(p.received,0)<(r.first_payload->>'total_money')::numeric)
             order by r.receipt_date desc,r.receipt_number limit 100 offset @offset
             """);
         command.Parameters.AddWithValue("offset", offset); command.Parameters.AddWithValue("unpaid", unpaid);
+        command.Parameters.AddWithValue("number", number ?? "");
         await using var reader = await command.ExecuteReaderAsync(ct);
         var rows = new List<object>(); long count = 0;
         while (await reader.ReadAsync(ct))
@@ -80,7 +82,7 @@ public sealed class LoyverseController(NpgsqlDataSource database, LoyverseSync s
             select collected_date,method,sum(amount),count(*)
             from ralaba_private.receipt_payments p
             join ralaba_private.loyverse_receipts r using(merchant_id,receipt_number)
-            where collected_date between @from and @to and not r.source_changed
+            where collected_date between @from and @to
             group by collected_date,method order by collected_date desc,method
             """);
         command.Parameters.AddWithValue("from", from); command.Parameters.AddWithValue("to", to);
@@ -88,7 +90,7 @@ public sealed class LoyverseController(NpgsqlDataSource database, LoyverseSync s
         await using (var reader = await command.ExecuteReaderAsync(ct))
             while (await reader.ReadAsync(ct)) days.Add(new { date = reader.GetFieldValue<DateOnly>(0), method = reader.GetString(1), amount = reader.GetDecimal(2), entries = reader.GetInt64(3) });
         await using var pending = database.CreateCommand("select count(*) from ralaba_private.loyverse_receipts where initial_received is null or source_changed");
-        return Ok(new { days, needsReview = (long)(await pending.ExecuteScalarAsync(ct))!, scope = "Confirmed Loyverse receipts and later payments recorded here. Legacy/manual receipts and unreconciled refunds are not included." });
+        return Ok(new { days, needsReview = (long)(await pending.ExecuteScalarAsync(ct))!, scope = "Recorded initial and later collections, including payments linked to receipts needing review. Source edits never remove recorded money. Refund payouts and legacy/manual receipts are not included." });
     }
 
     [HttpPost("receipts/{number}/payments")]

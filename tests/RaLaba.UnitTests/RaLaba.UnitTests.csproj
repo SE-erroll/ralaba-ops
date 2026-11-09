@@ -13,6 +13,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.8" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="../../docs/loyverse-schema.sql" Link="loyverse-schema.sql" CopyToOutputDirectory="PreserveNewest" />
     <ProjectReference Include="..\..\src\RaLaba.Domain\RaLaba.Domain.csproj" />
     <ProjectReference Include="..\..\src\RaLaba.Application\RaLaba.Application.csproj" />
     <ProjectReference Include="..\..\src\RaLaba.API\RaLaba.API.csproj" />

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { request } from "../lib/api";
+import { useSearchParams } from "react-router-dom";
 
 type Payment = { id: string; amount: number; date: string; method: string; note: string; initial: boolean };
 type ImportedReceipt = { receiptNumber: string; date: string; customer: string | null; total: number; received: number;
@@ -45,10 +46,12 @@ function PaymentForm({ receipt, onSaved }: { receipt: ImportedReceipt; onSaved: 
 }
 
 export default function LoyversePage() {
+  const [search, setSearch] = useSearchParams();
+  const selectedNumber = search.get("receipt") ?? "";
   const [page, setPage] = useState<Page>({ rows: [], count: 0 });
   const [status, setStatus] = useState<Status | null>(null);
   const [collections, setCollections] = useState<Collections | null>(null);
-  const [unpaid, setUnpaid] = useState(false);
+  const [unpaid, setUnpaid] = useState(search.get("unpaid") === "true");
   const [offset, setOffset] = useState(0);
   const [from, setFrom] = useState("2026-11-04");
   const [to, setTo] = useState(today());
@@ -58,13 +61,13 @@ export default function LoyversePage() {
   const load = useCallback(async () => {
     try {
       const [p, s, c] = await Promise.all([
-        request<Page>(`/loyverse/receipts?offset=${offset}&unpaid=${unpaid}`),
+        request<Page>(`/loyverse/receipts?offset=${offset}&unpaid=${unpaid}&number=${encodeURIComponent(selectedNumber)}`),
         request<Status>("/loyverse/status"),
         request<Collections>(`/loyverse/collections?from=${from}&to=${to}`)
       ]);
       setPage(p); setStatus(s); setCollections(c); setError("");
     } catch (err) { setError(err instanceof Error ? err.message : "Could not load Loyverse records."); }
-  }, [offset, unpaid, from, to]);
+  }, [offset, unpaid, from, to, selectedNumber]);
   useEffect(() => { let active = true; void load(); const timer = window.setInterval(() => { if (active) void load(); }, 60000); return () => { active = false; window.clearInterval(timer); }; }, [load]);
   async function sync() {
     setBusy(true); setNotice(""); setError("");
@@ -79,6 +82,7 @@ export default function LoyversePage() {
   for (const receipt of page.rows) { const day = localDate(receipt.date); groups.set(day, [...(groups.get(day) ?? []), receipt]); }
   return <main className="mx-auto max-w-6xl p-4 sm:p-6">
     <h1 className="text-2xl font-semibold">Loyverse receipts & payments</h1>
+    {selectedNumber && <p className="my-3">Receipt #{selectedNumber} · <button className="text-blue-700 underline" onClick={() => { setSearch({}); setOffset(0); }}>Show all receipts</button></p>}
     <p className="mt-2 text-sm">Comments: PAID · UNPAID · PARTIAL 100 CASH (or GCASH). Later payments stay here; Loyverse is unchanged.</p>
     <div className="my-4 flex flex-wrap items-center gap-3"><button className="rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-50" onClick={() => void sync()} disabled={busy}>{busy ? "Syncing…" : "Sync now"}</button>
       <button className="rounded border px-4 py-2" onClick={() => void load()}>Refresh</button>

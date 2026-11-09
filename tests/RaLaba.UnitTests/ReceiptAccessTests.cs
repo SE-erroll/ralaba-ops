@@ -57,6 +57,7 @@ public class ReceiptAccessTests
 
     [Theory]
     [InlineData("GET", "/api/receipts")]
+    [InlineData("GET", "/api/dashboard?from=2026-11-04&to=2026-11-07")]
     [InlineData("GET", "/api/loyverse/receipts")]
     [InlineData("GET", "/api/loyverse/collections")]
     [InlineData("GET", "/api/loyverse/status")]
