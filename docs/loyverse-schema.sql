@@ -51,3 +51,21 @@ REVOKE ALL ON ALL TABLES IN SCHEMA ralaba_private FROM PUBLIC, anon, authenticat
 -- No permissive policy: only the existing server database owner can access these tables.
 -- The deployed frontend now uses the authenticated backend, not direct table access.
 REVOKE ALL ON public.receipts FROM PUBLIC, anon, authenticated;
+
+-- Payment corrections: keep the current value and an append-only before/after history.
+-- Zero means an entry was voided as a recording error, never a refund payout.
+ALTER TABLE ralaba_private.receipt_payments ADD COLUMN IF NOT EXISTS revision integer NOT NULL DEFAULT 0;
+ALTER TABLE ralaba_private.receipt_payments DROP CONSTRAINT IF EXISTS receipt_payments_amount_check;
+ALTER TABLE ralaba_private.receipt_payments ADD CONSTRAINT receipt_payments_amount_check CHECK (amount >= 0);
+CREATE TABLE IF NOT EXISTS ralaba_private.payment_corrections (
+  request_id uuid PRIMARY KEY,
+  payment_id uuid NOT NULL REFERENCES ralaba_private.receipt_payments(id),
+  before_value jsonb NOT NULL,
+  after_value jsonb NOT NULL,
+  reason text NOT NULL CHECK (length(trim(reason)) BETWEEN 1 AND 500),
+  corrected_by text NOT NULL,
+  corrected_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS payment_corrections_payment_idx ON ralaba_private.payment_corrections(payment_id,corrected_at);
+ALTER TABLE ralaba_private.payment_corrections ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON ralaba_private.payment_corrections FROM PUBLIC, anon, authenticated;

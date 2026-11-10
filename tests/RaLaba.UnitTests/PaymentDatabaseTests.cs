@@ -87,6 +87,74 @@ public sealed class PaymentDatabaseTests : IAsyncLifetime
         client.PostAsJsonAsync($"/api/loyverse/receipts/{number}/{(initial?"initial-payment":"payments")}",
             new RecordPayment(id??Guid.NewGuid(),amount,DateOnly.Parse(date),method,note));
 
+    Task<HttpResponseMessage> Correct(Guid payment, decimal amount, string date="2020-11-05", string method="GCASH", int revision=0, Guid? request=null, string reason="Checked logbook", string number="test-1") =>
+        client.PostAsJsonAsync($"/api/loyverse/receipts/{number}/payments/{payment}/corrections",
+            new CorrectPayment(request??Guid.NewGuid(),revision,amount,DateOnly.Parse(date),method,reason));
+
+    [LocalPostgresFact]
+    public async Task Correction_MovesInitialToActualDay_PreservesAudit_AndResyncCannotRestoreOldPayment()
+    {
+        source.Rows=[Receipt(note:"PAID")]; await Sync();
+        var payment=(await Get("/api/loyverse/receipts")).GetProperty("rows")[0].GetProperty("payments")[0].GetProperty("id").GetGuid();
+        var request=Guid.NewGuid();
+        Assert.Equal(HttpStatusCode.OK,(await Correct(payment,200,request:request)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK,(await Correct(payment,200,request:request)).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await Correct(payment,190,request:request)).StatusCode);
+        await Sync();
+        var row=(await Get("/api/loyverse/receipts")).GetProperty("rows")[0];
+        Assert.Equal(0,row.GetProperty("initialReceived").GetDecimal());
+        Assert.Equal("UNPAID",row.GetProperty("initialStatus").GetString());
+        Assert.Equal(65,row.GetProperty("balance").GetDecimal());
+        var history=row.GetProperty("payments")[0];
+        Assert.False(history.GetProperty("initial").GetBoolean());
+        Assert.Equal(1,history.GetProperty("revision").GetInt32());
+        var audit=history.GetProperty("corrections"); Assert.Equal(1,audit.GetArrayLength());
+        Assert.Equal(265,audit[0].GetProperty("before").GetProperty("amount").GetDecimal());
+        Assert.Equal(200,audit[0].GetProperty("after").GetProperty("amount").GetDecimal());
+        Assert.Equal(Staff,audit[0].GetProperty("by").GetString());
+        Assert.Equal(0,(await Dashboard("2020-11-04","2020-11-04")).GetProperty("cash").GetDecimal());
+        Assert.Equal(200,(await Dashboard("2020-11-05","2020-11-05")).GetProperty("gcash").GetDecimal());
+        Assert.Equal(265,(await Dashboard()).GetProperty("sales").GetDecimal());
+        Assert.Equal(HttpStatusCode.OK,(await Pay(65,"2020-11-06")).StatusCode);
+    }
+
+    [LocalPostgresFact]
+    public async Task Correction_VoidsMistake_KeepsHistory_AndAllowsReentry()
+    {
+        source.Rows=[Receipt(note:"PAID")]; await Sync();
+        var payment=(await Get("/api/loyverse/receipts")).GetProperty("rows")[0].GetProperty("payments")[0].GetProperty("id").GetGuid();
+        Assert.Equal(HttpStatusCode.OK,(await Correct(payment,0,"2020-11-04","CASH")).StatusCode);
+        var row=(await Get("/api/loyverse/receipts")).GetProperty("rows")[0];
+        Assert.Equal(265,row.GetProperty("balance").GetDecimal());
+        Assert.Equal(0,row.GetProperty("initialReceived").GetDecimal());
+        Assert.Equal(1,row.GetProperty("payments").GetArrayLength());
+        var collections=await Get("/api/loyverse/collections?from=2020-11-04&to=2020-11-07");
+        Assert.Equal(0,collections.GetProperty("days").GetArrayLength());
+        Assert.Equal(HttpStatusCode.OK,(await Pay(265,"2020-11-05")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await Correct(payment,1,"2020-11-04","CASH",revision:1)).StatusCode);
+    }
+
+    [LocalPostgresFact]
+    public async Task Correction_RejectsInvalidData_AndConcurrentEditsCannotOverwrite()
+    {
+        source.Rows=[Receipt(),Receipt("other")]; await Sync();
+        var id=Guid.NewGuid(); Assert.Equal(HttpStatusCode.OK,(await Pay(100,"2020-11-05",id:id)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await Correct(id,10,reason:"")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await Correct(id,10,"2020-11-03")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await Correct(id,10,"2099-01-01")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await Correct(id,10,method:"BANK")).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await Correct(id,1.001m)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound,(await Correct(id,10,number:"other")).StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict,(await Correct(id,266)).StatusCode);
+        var edits=await Task.WhenAll(Correct(id,150),Correct(id,200));
+        Assert.Single(edits.Where(r=>r.StatusCode==HttpStatusCode.OK));
+        Assert.Single(edits.Where(r=>r.StatusCode==HttpStatusCode.Conflict));
+        var row=(await Get("/api/loyverse/receipts?number=test-1")).GetProperty("rows")[0];
+        Assert.Equal(1,row.GetProperty("payments")[0].GetProperty("corrections").GetArrayLength());
+        source.Rows=[Receipt(note:"changed")]; await Sync();
+        Assert.Equal(HttpStatusCode.Conflict,(await Correct(id,0,revision:1)).StatusCode);
+    }
+
     [LocalPostgresFact]
     public async Task UnpaidToPartialToPaid_UsesPaymentDates_AndRetriesAndResyncDoNotDuplicate()
     {

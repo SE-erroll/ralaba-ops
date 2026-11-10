@@ -42,8 +42,9 @@ public sealed class LoyverseController(NpgsqlDataSource database, LoyverseSync s
               coalesce(p.history,'[]'::jsonb)::text,count(*) over()
             from ralaba_private.loyverse_receipts r
             left join lateral (
-              select sum(amount) received, jsonb_agg(jsonb_build_object('id',id,'amount',amount,'date',collected_date,'method',method,'note',note,'initial',origin_key like 'initial:%') order by collected_date,recorded_at) history
-              from ralaba_private.receipt_payments where merchant_id=r.merchant_id and receipt_number=r.receipt_number
+              select sum(amount) received, jsonb_agg(jsonb_build_object('id',id,'amount',amount,'date',collected_date,'method',method,'note',note,'initial',origin_key like 'initial:%','revision',revision,
+                'corrections',coalesce((select jsonb_agg(jsonb_build_object('before',before_value,'after',after_value,'reason',reason,'by',corrected_by,'at',corrected_at) order by corrected_at,request_id) from ralaba_private.payment_corrections c where c.payment_id=pay.id),'[]'::jsonb)) order by collected_date,recorded_at) history
+              from ralaba_private.receipt_payments pay where merchant_id=r.merchant_id and receipt_number=r.receipt_number
             ) p on true
             where (@number='' or r.receipt_number=@number)
               and (not @unpaid or r.initial_received is null or r.source_changed or coalesce(p.received,0)<(r.first_payload->>'total_money')::numeric)
@@ -67,6 +68,7 @@ public sealed class LoyverseController(NpgsqlDataSource database, LoyverseSync s
                 initialReceived = reader.IsDBNull(5) ? (decimal?)null : reader.GetDecimal(5),
                 reviewReason = reader.GetBoolean(8) ? "Loyverse changed this receipt after import. Existing payments are preserved; reconcile before further payments." : reader.IsDBNull(7) ? null : reader.GetString(7),
                 canReview = reader.IsDBNull(5) && !reader.GetBoolean(8) && PaymentRules.Text(latest.RootElement,"receipt_type") == "SALE" && PaymentRules.Text(latest.RootElement,"cancelled_at") is null,
+                canCorrect = !reader.IsDBNull(5) && !reader.GetBoolean(8) && PaymentRules.Text(latest.RootElement,"receipt_type") == "SALE" && PaymentRules.Text(latest.RootElement,"cancelled_at") is null,
                 note = PaymentRules.Text(first.RootElement,"note"),
                 services = first.RootElement.TryGetProperty("line_items", out var items) ? items.EnumerateArray().Select(x => new { name = PaymentRules.Text(x,"item_name"), quantity = x.TryGetProperty("quantity",out var q) ? q.GetDecimal() : 0 }).ToArray() : [],
                 payments = history.RootElement.Clone() });
@@ -82,7 +84,7 @@ public sealed class LoyverseController(NpgsqlDataSource database, LoyverseSync s
             select collected_date,method,sum(amount),count(*)
             from ralaba_private.receipt_payments p
             join ralaba_private.loyverse_receipts r using(merchant_id,receipt_number)
-            where collected_date between @from and @to
+            where collected_date between @from and @to and p.amount>0
             group by collected_date,method order by collected_date desc,method
             """);
         command.Parameters.AddWithValue("from", from); command.Parameters.AddWithValue("to", to);
